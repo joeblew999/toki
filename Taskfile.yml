@@ -11,67 +11,86 @@ vars:
 
 tasks:
   default:
-    desc: Show available tasks
     cmds:
       - task --list-all
     silent: true
 
   install:
-    desc: Install toki from source
+    desc: Install toki
     cmds:
       - go install -v ./...
 
   test:
-    desc: Run all tests
+    desc: Run tests
     cmds:
       - go test ./...
 
-  # Examples - Simple (Go)
+  # Simple
   simple:
-    desc: Build simple Go example
     deps: [install]
     dir: "{{.EXAMPLES_DIR}}/simple"
     cmds:
       - "{{.TOKI_CMD}} generate -l en -t de -t ru -v"
       - go build -o simple .
 
+  simple:run:
+    dir: "{{.EXAMPLES_DIR}}/simple"
+    cmds:
+      - ./simple
+
+  simple:run:de:
+    dir: "{{.EXAMPLES_DIR}}/simple"
+    cmds:
+      - ./simple -l de
+
   simple:clean:
     dir: "{{.EXAMPLES_DIR}}/simple"
     cmds:
       - rm -rf tokibundle simple
 
-  # Examples - Complex (Go)
+  # Complex
   complex:
-    desc: Build complex Go example
     deps: [install]
     dir: "{{.EXAMPLES_DIR}}/complex"
     cmds:
       - "{{.TOKI_CMD}} generate -l en -t de -t ru -v"
       - go build -o complex .
 
+  complex:run:
+    dir: "{{.EXAMPLES_DIR}}/complex"
+    cmds:
+      - ./complex
+
+  complex:run:de:
+    dir: "{{.EXAMPLES_DIR}}/complex"
+    cmds:
+      - ./complex -l de
+
   complex:clean:
     dir: "{{.EXAMPLES_DIR}}/complex"
     cmds:
       - rm -rf tokibundle complex
 
-  # Examples - Simpleweb (Go)
+  # Simpleweb
   simpleweb:
-    desc: Build simpleweb Go example
     deps: [install]
     dir: "{{.EXAMPLES_DIR}}/simpleweb"
     cmds:
       - "{{.TOKI_CMD}} generate -l en -t de -v"
       - go build -o simpleweb .
-      - echo "Run ./simpleweb to start server on :8080"
+
+  simpleweb:run:
+    dir: "{{.EXAMPLES_DIR}}/simpleweb"
+    cmds:
+      - ./simpleweb
 
   simpleweb:clean:
     dir: "{{.EXAMPLES_DIR}}/simpleweb"
     cmds:
       - rm -rf tokibundle simpleweb
 
-  # Examples - Hugo (Markdown-only)
+  # Hugo
   hugo:
-    desc: Generate ARB files for Hugo markdown example
     deps: [install]
     dir: "{{.EXAMPLES_DIR}}/hugo"
     cmds:
@@ -82,16 +101,15 @@ tasks:
     cmds:
       - rm -rf tokibundle
 
-  # Examples - Markdown parser demo
+  # Markdown
   markdown:
-    desc: Run markdown parser demo
     dir: "{{.EXAMPLES_DIR}}/markdown"
     cmds:
       - go run . -content ./content -v
 
-  # Verify all examples work
+  # Verify
   verify:
-    desc: Clean and regenerate all examples
+    desc: Build all examples
     cmds:
       - task: simple:clean
       - task: complex:clean
@@ -101,32 +119,27 @@ tasks:
       - task: complex
       - task: simpleweb
       - task: hugo
-      - echo "✅ All examples verified"
 
-  # Generic commands (for use in other projects)
+  # Generic
   generate:
-    desc: Regenerate bundle in current directory
     deps: [install]
     dir: "{{.USER_WORKING_DIR}}"
     cmds:
       - "{{.TOKI_CMD}} generate -l {{.DEFAULT_LOCALE}} -v"
 
   lint:
-    desc: Check translation completeness
     deps: [install]
     dir: "{{.USER_WORKING_DIR}}"
     cmds:
       - "{{.TOKI_CMD}} lint -require-complete -v"
 
   webedit:
-    desc: Open web translation editor
     deps: [install]
     dir: "{{.USER_WORKING_DIR}}"
     cmds:
       - "{{.TOKI_CMD}} webedit"
 
   clean:
-    desc: Clean bundle in current directory
     dir: "{{.USER_WORKING_DIR}}"
     cmds:
       - rm -rf {{.BUNDLE_DIR}}

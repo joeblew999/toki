@@ -12,13 +12,22 @@ examples/hugo/
 ├── content/
 │   ├── en/           # English (source language)
 │   │   ├── _index.md
-│   │   └── about.md
+│   │   ├── about.md
+│   │   └── blog/
+│   │       ├── _index.md
+│   │       └── company-update.md  # Blog post with dates
 │   ├── de/           # German translations
 │   │   ├── _index.md
-│   │   └── about.md
+│   │   ├── about.md
+│   │   └── blog/
+│   │       ├── _index.md
+│   │       └── company-update.md
 │   └── zh/           # Chinese translations
 │       ├── _index.md
-│       └── about.md
+│       ├── about.md
+│       └── blog/
+│           ├── _index.md
+│           └── company-update.md
 └── tokibundle/       # Generated ARB files (git-ignored)
     ├── catalog_en.arb
     ├── catalog_de.arb
@@ -85,3 +94,41 @@ toki generate -l en -md ./content/en -md-only -t de -t zh -v
 - Code blocks (fenced and indented)
 - URLs and paths
 - HTML comments
+
+## Date Handling (Issue #18)
+
+The blog post example (`blog/company-update.md`) demonstrates date handling challenges:
+
+### Date Locations
+
+| Location | Format | Example |
+|----------|--------|---------|
+| Front matter `date` | RFC3339/ISO8601 | `2024-12-15T09:00:00+00:00` |
+| Front matter `lastmod` | RFC3339/ISO8601 | `2024-12-16T14:30:00+00:00` |
+| Inline text | Human-readable | "December 1, 2024" |
+| Footer text | Human-readable | "Published: December 15, 2024" |
+
+### Timezone Considerations
+
+The example shows timezone offsets in front matter:
+- English: `+00:00` (UTC)
+- German: `+01:00` (CET)
+- Chinese: `+08:00` (CST)
+
+### Translation Challenges
+
+1. **Front matter dates**: Should NOT be translated (Hugo handles display formatting)
+2. **Inline dates**: Need locale-aware translation
+   - EN: "December 1, 2024"
+   - DE: "1. Dezember 2024"
+   - ZH: "2024年12月1日"
+3. **Times with zones**: Need conversion, not just translation
+   - EN: "3:00 PM UTC"
+   - DE: "16:00 Uhr MEZ"
+   - ZH: "北京时间23:00"
+
+### Current Status
+
+- Front matter dates are preserved correctly (not extracted for translation)
+- Inline dates are extracted and translated by translation services
+- Time zone conversion is not automated (see issue #18)

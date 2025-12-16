@@ -35,10 +35,55 @@
 | #18 | Time zone conversion | Feature request |
 | #12 | -json output for multi-lang generate | Works in our fork |
 
+## Known Issues (Our Fork)
+
+- [ ] **Nested YAML front matter not extracted**
+  - `toki generate` only extracts top-level front matter (`title`, `description`, `meta_title`)
+  - Nested structures like `banner.title`, `features[].content`, `features[].bulletpoints[]` are skipped
+  - Impact: Hugo Plate homepage `_index.md` requires manual translation of nested YAML
+  - Workaround: Manually translate homepage nested structures after `toki apply`
+
+- [ ] **Links in translated content not localized**
+  - `toki apply` preserves original English links like `/platform` instead of `/vi/platform`
+  - Impact: Button links in translated pages point to English versions
+  - Workaround: Manually fix links in homepage or add Hugo logic to auto-prefix
+
+## Date/Time Handling (Issue #18)
+
+**Hugo example added:** `examples/hugo/content/*/blog/company-update.md`
+
+### Date Locations in Hugo Markdown
+
+| Location | Format | Toki Behavior |
+|----------|--------|---------------|
+| Front matter `date` | RFC3339: `2024-12-15T09:00:00+00:00` | **Preserved** (not extracted) |
+| Front matter `lastmod` | RFC3339: `2024-12-15T09:00:00+00:00` | **Preserved** (not extracted) |
+| Inline dates | Human: "December 1, 2024" | **Extracted** (translated by service) |
+| Times with zones | "3:00 PM UTC" | **Extracted** (needs conversion) |
+
+### What Works Now
+
+1. **Front matter dates preserved** - toki doesn't extract `date` or `lastmod` fields
+2. **Inline dates translated** - DeepL/Claude handle locale formatting:
+   - EN: "December 1, 2024" → DE: "1. Dezember 2024" → ZH: "2024年12月1日"
+
+### What Needs Work (Issue #18)
+
+**Time zone conversion** - When a post says "3:00 PM UTC", translations should convert:
+- EN: "3:00 PM UTC"
+- DE: "16:00 Uhr MEZ" (UTC+1)
+- ZH: "北京时间23:00" (UTC+8)
+
+**Options to explore:**
+1. **Shortcode approach**: `{{< time "2025-01-20T15:00:00Z" >}}` - Hugo handles conversion
+2. **Toki marker**: `[time:2025-01-20T15:00:00Z]` - toki detects and converts
+3. **Translation hint**: Add metadata to ARB for translator context
+4. **Leave to translator**: Current behavior - human/AI handles conversion
+
 ## Future Ideas
 
-- Date/time locale awareness (issue #18)
 - Use Claude for AI-assisted translations with ARB format
-- DataStar webedit (upstream prefers HTMX) 
+- DataStar webedit (upstream prefers HTMX)
+- Extract nested YAML front matter for Hugo Plate themes 
 
 

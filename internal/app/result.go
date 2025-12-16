@@ -53,38 +53,41 @@ func (r Result) mustPrintJSON() {
 		errMsg = r.Err.Error()
 	}
 	data := ResultJSON{
-		Error:          errMsg,
-		StringCalls:    r.Scan.StringCalls.Load(),
-		WriteCalls:     r.Scan.WriteCalls.Load(),
-		TIKs:           r.Scan.Texts.Len(),
-		TIKsUnique:     r.Scan.TextIndexByID.Len(),
-		TIKsNew:        len(r.NewTexts),
-		FilesTraversed: int(r.Scan.FilesTraversed.Load()),
-		TimeMS:         time.Since(r.Start).Milliseconds(),
+		Error:  errMsg,
+		TimeMS: time.Since(r.Start).Milliseconds(),
 	}
-	_ = r.Scan.SourceErrors.Access(func(s []codeparse.SourceError) error {
-		data.SourceErrors = make([]ResultJSONSourceError, len(s))
-		for i, serr := range s {
-			data.SourceErrors[i] = ResultJSONSourceError{
-				Error: serr.Err.Error(),
-				File:  serr.Filename,
-				Line:  serr.Line,
-				Col:   serr.Column,
+	// Only access Scan fields if Scan is not nil
+	if r.Scan != nil {
+		data.StringCalls = r.Scan.StringCalls.Load()
+		data.WriteCalls = r.Scan.WriteCalls.Load()
+		data.TIKs = r.Scan.Texts.Len()
+		data.TIKsUnique = r.Scan.TextIndexByID.Len()
+		data.TIKsNew = len(r.NewTexts)
+		data.FilesTraversed = int(r.Scan.FilesTraversed.Load())
+		_ = r.Scan.SourceErrors.Access(func(s []codeparse.SourceError) error {
+			data.SourceErrors = make([]ResultJSONSourceError, len(s))
+			for i, serr := range s {
+				data.SourceErrors[i] = ResultJSONSourceError{
+					Error: serr.Err.Error(),
+					File:  serr.Filename,
+					Line:  serr.Line,
+					Col:   serr.Column,
+				}
 			}
-		}
-		return nil
-	})
-	_ = r.Scan.Catalogs.Access(func(s []*codeparse.Catalog) error {
-		data.Catalogs = make([]ResultJSONCatalog, len(s))
-		for i, c := range s {
-			completeness := completeness(c)
-			data.Catalogs[i] = ResultJSONCatalog{
-				Locale:       c.ARB.Locale.String(),
-				Completeness: completeness,
+			return nil
+		})
+		_ = r.Scan.Catalogs.Access(func(s []*codeparse.Catalog) error {
+			data.Catalogs = make([]ResultJSONCatalog, len(s))
+			for i, c := range s {
+				completeness := completeness(c)
+				data.Catalogs[i] = ResultJSONCatalog{
+					Locale:       c.ARB.Locale.String(),
+					Completeness: completeness,
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(data); err != nil {
 		panic(fmt.Errorf("encoding JSON to stderr: %w", err))

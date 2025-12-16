@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	"go/token"
 	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/romshark/toki/internal/gengo"
 	"github.com/romshark/toki/internal/icu"
 	"github.com/romshark/toki/internal/log"
+	"github.com/romshark/toki/internal/markdown"
 	"github.com/romshark/toki/internal/sync"
 
 	"github.com/cespare/xxhash/v2"
@@ -60,64 +63,116 @@ func (g *Generate) Run(
 		log.Info("linting mode")
 	}
 
-	if !lintOnly {
-		// Create bundle package directory if it doesn't exist yet.
-		if err := prepareBundlePackageDir(conf.BundlePkgPath); err != nil {
-			result.Err = err
+	// Markdown-only mode: skip Go source code scanning entirely
+	markdownOnly := conf.MarkdownOnly
+
+	var scan *codeparse.Scan
+	var headTxt []string
+
+	if markdownOnly {
+		log.Info("markdown-only mode: skipping Go source code scanning")
+		if conf.Locale == language.Und {
+			result.Err = ErrMissingLocaleParam
 			return result
 		}
-	}
-
-	// Read/create head.txt.
-	createIfNotExist := !lintOnly
-	headTxt, err := readOrCreateHeadTxt(conf, createIfNotExist)
-	if err != nil {
-		result.Err = err
-		return result
-	}
-
-	if !lintOnly {
-		mainBundleFile := filepath.Join(
-			conf.ModPath, conf.BundlePkgPath, MainBundleFileGo,
-		)
-		if _, err := os.Stat(mainBundleFile); errors.Is(err, os.ErrNotExist) {
-			// Require the locale parameter in this case.
-			if conf.Locale == language.Und {
-				result.Err = ErrMissingLocaleParam
-				return result
-			}
-			scan := codeparse.NewScan(conf.Locale, Version)
-			// Need to generate an empty bundle package first.
-			// Otherwise if the bundle existed and was imported before, later got removed
-			// and then toki generate was rerun it will first generate an incorrect bundle
-			// codeparse will be missing method receiver type information on first scan.
-			if err := generateGoBundle(conf.BundlePkgPath, scan, headTxt); err != nil {
+		// Create bundle directory for ARB files only (no Go code)
+		if !lintOnly {
+			if err := prepareBundlePackageDir(conf.BundlePkgPath); err != nil {
 				result.Err = err
 				return result
 			}
-		} else if err != nil {
-			result.Err = fmt.Errorf(
-				"checking main bundle file %q: %w",
-				mainBundleFile, err,
+		}
+		// Read/create head.txt
+		createIfNotExist := !lintOnly
+		var err error
+		headTxt, err = readOrCreateHeadTxt(conf, createIfNotExist)
+		if err != nil {
+			result.Err = err
+			return result
+		}
+		// Create a new scan without parsing Go code
+		scan = codeparse.NewScan(conf.Locale, Version)
+		result.Scan = scan
+	} else {
+		// Standard mode: process Go source code
+		if !lintOnly {
+			// Create bundle package directory if it doesn't exist yet.
+			if err := prepareBundlePackageDir(conf.BundlePkgPath); err != nil {
+				result.Err = err
+				return result
+			}
+		}
+
+		// Read/create head.txt.
+		createIfNotExist := !lintOnly
+		var err error
+		headTxt, err = readOrCreateHeadTxt(conf, createIfNotExist)
+		if err != nil {
+			result.Err = err
+			return result
+		}
+
+		if !lintOnly {
+			mainBundleFile := filepath.Join(
+				conf.ModPath, conf.BundlePkgPath, MainBundleFileGo,
 			)
+			if _, err := os.Stat(mainBundleFile); errors.Is(err, os.ErrNotExist) {
+				// Require the locale parameter in this case.
+				if conf.Locale == language.Und {
+					result.Err = ErrMissingLocaleParam
+					return result
+				}
+				scan := codeparse.NewScan(conf.Locale, Version)
+				// Need to generate an empty bundle package first.
+				// Otherwise if the bundle existed and was imported before, later got removed
+				// and then toki generate was rerun it will first generate an incorrect bundle
+				// codeparse will be missing method receiver type information on first scan.
+				if err := generateGoBundle(conf.BundlePkgPath, scan, headTxt); err != nil {
+					result.Err = err
+					return result
+				}
+			} else if err != nil {
+				result.Err = fmt.Errorf(
+					"checking main bundle file %q: %w",
+					mainBundleFile, err,
+				)
+				return result
+			}
+		}
+
+		parser := codeparse.NewParser(g.hasher, g.tikParser, g.tikICUTranslator)
+
+		// Parse source code and bundle.
+		result.Scan, result.Err = parser.Parse(
+			env, conf.ModPath, conf.BundlePkgPath, conf.TrimPath,
+		)
+		if result.Err != nil {
+			result.Err = fmt.Errorf("%w: %w", ErrAnalyzingSource, result.Err)
+			return result
+		}
+		scan = result.Scan
+		if scan.SourceErrors.Len() > 0 {
+			result.Err = ErrSourceErrors
 			return result
 		}
 	}
 
-	parser := codeparse.NewParser(g.hasher, g.tikParser, g.tikICUTranslator)
-
-	// Parse source code and bundle.
-	result.Scan, result.Err = parser.Parse(
-		env, conf.ModPath, conf.BundlePkgPath, conf.TrimPath,
-	)
-	if result.Err != nil {
-		result.Err = fmt.Errorf("%w: %w", ErrAnalyzingSource, result.Err)
-		return result
-	}
-	scan := result.Scan
-	if scan.SourceErrors.Len() > 0 {
-		result.Err = ErrSourceErrors
-		return result
+	// Parse markdown content if path is specified.
+	if conf.MarkdownPath != "" {
+		mdTexts, err := g.parseMarkdown(conf)
+		if err != nil {
+			result.Err = fmt.Errorf("parsing markdown: %w", err)
+			return result
+		}
+		// Merge markdown texts into the scan
+		for _, mdText := range mdTexts {
+			index := scan.Texts.Len()
+			scan.Texts.Append(mdText)
+			scan.TextIndexByID.Set(mdText.IDHash, index)
+		}
+		log.Info("markdown texts extracted",
+			slog.Int("count", len(mdTexts)),
+			slog.String("path", conf.MarkdownPath))
 	}
 
 	if conf.Locale != language.Und {
@@ -264,18 +319,21 @@ func (g *Generate) Run(
 			return result
 		}
 
-		if scan.TokiVersion == "" || scan.TokiVersion != Version {
-			// Clear generated files on version mismatch.
-			if err := deleteAllTokiGeneratedFiles(conf.BundlePkgPath); err != nil {
-				result.Err = fmt.Errorf("removing sources of existing bundle: %w", err)
+		// Skip Go bundle generation in markdown-only mode
+		if !markdownOnly {
+			if scan.TokiVersion == "" || scan.TokiVersion != Version {
+				// Clear generated files on version mismatch.
+				if err := deleteAllTokiGeneratedFiles(conf.BundlePkgPath); err != nil {
+					result.Err = fmt.Errorf("removing sources of existing bundle: %w", err)
+					return result
+				}
+			}
+
+			// Generate go bundle.
+			if err := generateGoBundle(conf.BundlePkgPath, scan, headTxt); err != nil {
+				result.Err = err
 				return result
 			}
-		}
-
-		// Generate go bundle.
-		if err := generateGoBundle(conf.BundlePkgPath, scan, headTxt); err != nil {
-			result.Err = err
-			return result
 		}
 	}
 
@@ -545,7 +603,14 @@ func completeness(catalog *codeparse.Catalog) float64 {
 func (g *Generate) newARBMsg(
 	locale language.Tag, text codeparse.Text,
 ) (msg arb.Message, err error) {
-	icuMsg := g.tikICUTranslator.TIK2ICU(text.TIK)
+	var icuMsg string
+	// For markdown texts (no tokens), use raw content directly
+	// Escape single quotes for ICU message format (single quote becomes double single quote)
+	if len(text.TIK.Tokens) == 0 {
+		icuMsg = escapeICUMessage(text.TIK.Raw)
+	} else {
+		icuMsg = g.tikICUTranslator.TIK2ICU(text.TIK)
+	}
 
 	description := strings.Join(text.Comments, " ")
 
@@ -606,4 +671,96 @@ func (g *Generate) newARBMsg(
 		Context:          text.Context(),
 		Placeholders:     placeholders,
 	}, nil
+}
+
+// escapeICUMessage escapes special characters in plain text for ICU message format.
+// Single quotes need to be doubled ('') to be treated as literal quotes.
+func escapeICUMessage(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
+// parseMarkdown scans markdown files and converts them to codeparse.Text entries.
+func (g *Generate) parseMarkdown(conf *config.ConfigGenerate) ([]codeparse.Text, error) {
+	opts := markdown.DefaultOptions()
+
+	// Apply extension filters if specified
+	if len(conf.MarkdownExtensions) > 0 {
+		// Start with all disabled
+		opts.ExtractHeadings = false
+		opts.ExtractParagraphs = false
+		opts.ExtractListItems = false
+		opts.ExtractBlockquotes = false
+		opts.ExtractImageAlt = false
+		opts.ExtractLinkText = false
+		opts.ExtractFrontmatter = false
+
+		for _, ext := range conf.MarkdownExtensions {
+			switch strings.ToLower(ext) {
+			case "headings", "heading":
+				opts.ExtractHeadings = true
+			case "paragraphs", "paragraph":
+				opts.ExtractParagraphs = true
+			case "lists", "list":
+				opts.ExtractListItems = true
+			case "blockquotes", "blockquote":
+				opts.ExtractBlockquotes = true
+			case "images", "image":
+				opts.ExtractImageAlt = true
+			case "links", "link":
+				opts.ExtractLinkText = true
+			case "frontmatter":
+				opts.ExtractFrontmatter = true
+			case "all":
+				opts = markdown.DefaultOptions()
+			}
+		}
+	}
+
+	mdParser := markdown.NewParserWithOptions(opts)
+	result, err := mdParser.ParseDir(conf.MarkdownPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate hashes
+	result.GenerateHashes(g.hasher)
+
+	// Convert markdown texts to codeparse.Text format
+	var texts []codeparse.Text
+	for _, file := range result.Files {
+		for _, mdText := range file.Texts {
+			// Create a synthetic token.Position for the markdown file
+			pos := token.Position{
+				Filename: file.AbsPath,
+				Line:     mdText.Line,
+				Column:   1,
+			}
+
+			// Create a minimal TIK with just the raw content
+			// Markdown content is plain text without placeholders
+			fakeTIK := tik.TIK{
+				Raw:    mdText.Content,
+				Tokens: nil, // No tokens for plain markdown text
+			}
+
+			text := codeparse.Text{
+				Position: pos,
+				TIK:      fakeTIK,
+				IDHash:   mdText.IDHash,
+				Comments: []string{mdText.Context},
+			}
+
+			texts = append(texts, text)
+		}
+	}
+
+	// Sort by file path then line number for deterministic output
+	slices.SortFunc(texts, func(a, b codeparse.Text) int {
+		if a.Position.Filename != b.Position.Filename {
+			return strings.Compare(a.Position.Filename, b.Position.Filename)
+		}
+		return a.Position.Line - b.Position.Line
+	})
+
+	return texts, nil
 }

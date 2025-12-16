@@ -26,6 +26,10 @@ go.work.sum
 
 # Example binaries
 example
+examples/simple/simple
+examples/complex/complex
+examples/simpleweb/simpleweb
+examples/markdown/markdown
 
 # Generated bundle files
 **/tokibundle/bundle_gen.go

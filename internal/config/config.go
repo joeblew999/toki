@@ -26,6 +26,10 @@ type ConfigGenerate struct {
 	VerboseMode     bool
 	BundlePkgPath   string
 	RequireComplete bool
+	// Markdown scanning options
+	MarkdownPath       string   // Path to markdown content directory
+	MarkdownExtensions []string // Which elements to extract (headings, paragraphs, etc.)
+	MarkdownOnly       bool     // Only process markdown, skip Go source scanning
 }
 
 var ErrLocaleNotBCP47 = errors.New("must be a valid non-und BCP 47 locale")
@@ -53,6 +57,7 @@ func ParseCLIArgsGenerate(osArgs []string) (*ConfigGenerate, error) {
 
 	var locale string
 	var translations strArray
+	var mdExtensions strArray
 
 	cli := flag.NewFlagSet(osArgs[0], flag.ExitOnError)
 	cli.StringVar(&locale, "l", "",
@@ -70,6 +75,14 @@ func ParseCLIArgsGenerate(osArgs []string) (*ConfigGenerate, error) {
 		"path to generated Go bundle package relative to module path (-m)")
 	cli.BoolVar(&c.RequireComplete, "require-complete", false,
 		"fails the command if any active catalog has a completeness < 1.0 (under 100%)")
+	// Markdown options
+	cli.StringVar(&c.MarkdownPath, "md", "",
+		"path to markdown content directory (enables markdown scanning)")
+	cli.Var(&mdExtensions, "md-ext",
+		"markdown elements to extract: headings, paragraphs, lists, blockquotes, images, frontmatter "+
+			"(default: all). Multiple -md-ext flags can be used.")
+	cli.BoolVar(&c.MarkdownOnly, "md-only", false,
+		"only process markdown files, skip Go source code scanning (for non-Go projects like Hugo)")
 
 	if err := cli.Parse(osArgs[2:]); err != nil {
 		return nil, fmt.Errorf("parsing: %w", err)
@@ -106,6 +119,9 @@ func ParseCLIArgsGenerate(osArgs []string) (*ConfigGenerate, error) {
 			return nil, fmt.Errorf("argument t=%q: %w: is und", s, ErrLocaleNotBCP47)
 		}
 	}
+
+	// Process markdown extensions
+	c.MarkdownExtensions = mdExtensions
 
 	return c, nil
 }

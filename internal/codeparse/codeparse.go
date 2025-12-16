@@ -78,6 +78,10 @@ type Text struct {
 }
 
 func (t Text) Context() string {
+	// Handle markdown texts which have nil tokens
+	if len(t.TIK.Tokens) == 0 {
+		return ""
+	}
 	f := t.TIK.Tokens[0]
 	if f.Type != tik.TokenTypeContext {
 		return ""

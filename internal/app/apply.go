@@ -40,11 +40,11 @@ type Apply struct {
 
 // ApplyResult holds the results of an apply operation.
 type ApplyResult struct {
-	Start         time.Time
-	FilesWritten  int
-	TextsApplied  int
-	TextsSkipped  int // Empty translations
-	Err           error
+	Start        time.Time
+	FilesWritten int
+	TextsApplied int
+	TextsSkipped int // Empty translations
+	Err          error
 }
 
 func (r *ApplyResult) Print() {

@@ -675,7 +675,7 @@ func (g *Generate) newARBMsg(
 
 // escapeICUMessage escapes special characters in plain text for ICU message format.
 // In ICU message format:
-// - Single quotes are escape characters, so literal ' becomes ''
+// - Single quotes are escape characters, so literal ' becomes ”
 // - Curly braces { } are special (for placeholders), so literal braces need quoting
 // - The pattern '{' escapes the brace as a literal
 // However, we use a simpler approach: wrap the entire message in single quotes

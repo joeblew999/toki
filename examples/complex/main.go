@@ -48,9 +48,9 @@ func main() {
 		loc, err = time.LoadLocation(*fTimezone)
 		if err != nil {
 			fmt.Printf("Warning: invalid timezone %q, using locale default\n", *fTimezone)
-			loc = tokibundle.LocaleToTimezone(locale)
 		}
-	} else {
+	}
+	if loc == nil {
 		loc = tokibundle.LocaleToTimezone(locale)
 	}
 
@@ -68,6 +68,8 @@ func main() {
 	} else {
 		fmt.Println("No default timezone for locale, use -tz flag")
 	}
+
+	_ = fTimezone // silence unused warning when tokibundle lacks timezone support
 
 	//  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut posuere tortor ex,
 	// at interdum lacus facilisis vel. In sed metus sit amet ex pellentesque consectetur

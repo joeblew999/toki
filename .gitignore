@@ -36,3 +36,5 @@ examples/markdown/markdown
 **/tokibundle/catalog_*.arb
 **/tokibundle/*_gen.go
 **/tokibundle/head.txt
+.bin/
+.task/

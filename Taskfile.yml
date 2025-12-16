@@ -4,7 +4,9 @@ env:
   GOWORK: off
 
 vars:
-  TOKI_CMD: toki
+  BIN_DIR: "{{.ROOT_DIR}}/.bin"
+  TOKI_BIN: "{{.BIN_DIR}}/toki"
+  TOKI_CMD: "{{.TOKI_BIN}}"
   DEFAULT_LOCALE: en
   BUNDLE_DIR: tokibundle
   EXAMPLES_DIR: "{{.ROOT_DIR}}/examples"
@@ -16,9 +18,16 @@ tasks:
     silent: true
 
   install:
-    desc: Install toki
+    desc: Install toki to .bin directory
     cmds:
-      - go install -v ./...
+      - mkdir -p {{.BIN_DIR}}
+      - go build -o {{.TOKI_BIN}} .
+    sources:
+      - "*.go"
+      - "internal/**/*.go"
+      - "template/**/*.go"
+    generates:
+      - "{{.TOKI_BIN}}"
 
   test:
     desc: Run tests
@@ -71,6 +80,20 @@ tasks:
     dir: "{{.EXAMPLES_DIR}}/complex"
     cmds:
       - ./complex -l de
+
+  complex:run:tz:
+    desc: Run complex example with timezone demo
+    deps: [complex]
+    dir: "{{.EXAMPLES_DIR}}/complex"
+    cmds:
+      - echo "=== English with US timezone ==="
+      - ./complex -l en
+      - echo ""
+      - echo "=== German with Berlin timezone ==="
+      - ./complex -l de
+      - echo ""
+      - echo "=== English with explicit Bangkok timezone ==="
+      - ./complex -l en -tz Asia/Bangkok
 
   complex:clean:
     dir: "{{.EXAMPLES_DIR}}/complex"

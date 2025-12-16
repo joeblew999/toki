@@ -168,7 +168,6 @@ func (p *Parser) ParseDir(dir string) (*ScanResult, error) {
 		result.Files = append(result.Files, file)
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

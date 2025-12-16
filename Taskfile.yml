@@ -34,11 +34,14 @@ tasks:
       - go build -o simple .
 
   simple:run:
+    desc: Build and run simple example
+    deps: [simple]
     dir: "{{.EXAMPLES_DIR}}/simple"
     cmds:
       - ./simple
 
   simple:run:de:
+    deps: [simple]
     dir: "{{.EXAMPLES_DIR}}/simple"
     cmds:
       - ./simple -l de
@@ -57,11 +60,14 @@ tasks:
       - go build -o complex .
 
   complex:run:
+    desc: Build and run complex example
+    deps: [complex]
     dir: "{{.EXAMPLES_DIR}}/complex"
     cmds:
       - ./complex
 
   complex:run:de:
+    deps: [complex]
     dir: "{{.EXAMPLES_DIR}}/complex"
     cmds:
       - ./complex -l de
@@ -80,6 +86,8 @@ tasks:
       - go build -o simpleweb .
 
   simpleweb:run:
+    desc: Build and run simpleweb example
+    deps: [simpleweb]
     dir: "{{.EXAMPLES_DIR}}/simpleweb"
     cmds:
       - ./simpleweb
@@ -89,23 +97,37 @@ tasks:
     cmds:
       - rm -rf tokibundle simpleweb
 
-  # Hugo
+  # Hugo (markdown translation for static sites)
   hugo:
+    desc: Generate ARB for Hugo markdown (en -> de, zh)
     deps: [install]
     dir: "{{.EXAMPLES_DIR}}/hugo"
     cmds:
       - "{{.TOKI_CMD}} generate -l en -md ./content/en -md-only -t de -t zh -v"
+
+  hugo:arb:
+    desc: Show generated ARB catalog
+    dir: "{{.EXAMPLES_DIR}}/hugo"
+    cmds:
+      - cat tokibundle/catalog_en.arb
 
   hugo:clean:
     dir: "{{.EXAMPLES_DIR}}/hugo"
     cmds:
       - rm -rf tokibundle
 
-  # Markdown
+  # Markdown (standalone parser demo)
   markdown:
+    desc: Run markdown parser demo
     dir: "{{.EXAMPLES_DIR}}/markdown"
     cmds:
       - go run . -content ./content -v
+
+  markdown:json:
+    desc: Output markdown as ARB JSON
+    dir: "{{.EXAMPLES_DIR}}/markdown"
+    cmds:
+      - go run . -content ./content -json
 
   # Verify
   verify:

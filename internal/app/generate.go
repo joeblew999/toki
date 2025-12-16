@@ -659,7 +659,7 @@ func (g *Generate) newARBMsg(
 
 	icuTokens, err := g.icuTokenizer.Tokenize(locale, nil, icuMsg)
 	if err != nil {
-		return arb.Message{ID: msg.ID}, err
+		return arb.Message{ID: msg.ID}, fmt.Errorf("tokenizing ICU message at %s: %w (content: %.100q)", log.FmtPos(text.Position), err, icuMsg)
 	}
 
 	return arb.Message{
@@ -674,9 +674,31 @@ func (g *Generate) newARBMsg(
 }
 
 // escapeICUMessage escapes special characters in plain text for ICU message format.
-// Single quotes need to be doubled ('') to be treated as literal quotes.
+// In ICU message format:
+// - Single quotes are escape characters, so literal ' becomes ''
+// - Curly braces { } are special (for placeholders), so literal braces need quoting
+// - The pattern '{' escapes the brace as a literal
+// However, we use a simpler approach: wrap the entire message in single quotes
+// if it contains any special characters. The pattern is: 'literal text here'
 func escapeICUMessage(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
+	// If the string contains special ICU characters, wrap the whole thing in quotes
+	hasSpecial := strings.ContainsAny(s, "{}#|")
+	hasSingleQuote := strings.Contains(s, "'")
+
+	if !hasSpecial && !hasSingleQuote {
+		return s
+	}
+
+	// Escape single quotes first (double them)
+	s = strings.ReplaceAll(s, "'", "''")
+
+	// If there are special characters, wrap the entire string in quotes
+	// This makes {, }, #, | all literal
+	if hasSpecial {
+		s = "'" + s + "'"
+	}
+
+	return s
 }
 
 // parseMarkdown scans markdown files and converts them to codeparse.Text entries.

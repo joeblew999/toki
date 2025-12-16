@@ -126,6 +126,64 @@ func ParseCLIArgsGenerate(osArgs []string) (*ConfigGenerate, error) {
 	return c, nil
 }
 
+// ConfigApply holds configuration for the apply command.
+type ConfigApply struct {
+	SourceLocale language.Tag // Source language (default: en)
+	TargetLocale language.Tag // Target language to apply
+	MarkdownPath string       // Path to source markdown content
+	OutputPath   string       // Path to write translated markdown
+	BundlePath   string       // Path to tokibundle directory with ARB files
+	QuietMode    bool
+	VerboseMode  bool
+}
+
+// ParseCLIArgsApply parses CLI arguments for command "apply"
+func ParseCLIArgsApply(osArgs []string) (*ConfigApply, error) {
+	c := &ConfigApply{
+		SourceLocale: language.English,
+	}
+
+	var sourceLang, targetLang string
+
+	cli := flag.NewFlagSet(osArgs[0], flag.ExitOnError)
+	cli.StringVar(&sourceLang, "l", "en",
+		"source locale (default: en)")
+	cli.StringVar(&targetLang, "t", "",
+		"target locale to apply translations for (required)")
+	cli.StringVar(&c.MarkdownPath, "md", "",
+		"path to source markdown content directory (required)")
+	cli.StringVar(&c.OutputPath, "out", "",
+		"path to write translated markdown files (required)")
+	cli.StringVar(&c.BundlePath, "b", "tokibundle",
+		"path to bundle directory containing ARB files")
+	cli.BoolVar(&c.QuietMode, "q", false, "disable all console logging")
+	cli.BoolVar(&c.VerboseMode, "v", false, "enables verbose console logging")
+
+	if err := cli.Parse(osArgs[2:]); err != nil {
+		return nil, fmt.Errorf("parsing: %w", err)
+	}
+
+	// Parse source locale
+	if sourceLang != "" {
+		var err error
+		c.SourceLocale, err = language.Parse(sourceLang)
+		if err != nil {
+			return nil, fmt.Errorf("argument l=%q: %w: %w", sourceLang, ErrLocaleNotBCP47, err)
+		}
+	}
+
+	// Parse target locale (required)
+	if targetLang != "" {
+		var err error
+		c.TargetLocale, err = language.Parse(targetLang)
+		if err != nil {
+			return nil, fmt.Errorf("argument t=%q: %w: %w", targetLang, ErrLocaleNotBCP47, err)
+		}
+	}
+
+	return c, nil
+}
+
 type strArray []string
 
 func (l *strArray) String() string {

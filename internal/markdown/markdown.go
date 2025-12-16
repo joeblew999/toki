@@ -43,11 +43,52 @@ type Text struct {
 type Frontmatter struct {
 	Title       string   `yaml:"title"`
 	Description string   `yaml:"description"`
+	MetaTitle   string   `yaml:"meta_title"`
 	Author      string   `yaml:"author"`
 	Date        string   `yaml:"date"`
 	Tags        []string `yaml:"tags"`
-	// Extra holds any additional frontmatter fields
+	// Extra holds any additional frontmatter fields (for nested extraction)
 	Extra map[string]any `yaml:",inline"`
+}
+
+// translatableFields lists field names that should be extracted for translation.
+// These are typically human-readable text, not URLs, booleans, or technical values.
+var translatableFields = map[string]bool{
+	"title":       true,
+	"description": true,
+	"meta_title":  true,
+	"content":     true,
+	"label":       true,
+	"role":        true,
+	"name":        true,
+	"alt":         true,
+	"caption":     true,
+	"subtitle":    true,
+	"summary":     true,
+	"text":        true,
+	"heading":     true,
+	"subheading":  true,
+	"quote":       true,
+	"author":      true,
+}
+
+// skipFields lists field names that should NOT be extracted (technical/non-translatable).
+var skipFields = map[string]bool{
+	"link":    true,
+	"url":     true,
+	"href":    true,
+	"image":   true,
+	"icon":    true,
+	"enable":  true,
+	"enabled": true,
+	"date":    true,
+	"draft":   true,
+	"weight":  true,
+	"type":    true,
+	"layout":  true,
+	"aliases": true,
+	"tags":    true,
+	"categories": true,
 }
 
 // File represents a parsed markdown file with its extracted texts.
@@ -199,12 +240,13 @@ func (p *Parser) ParseFile(path string) (*File, error) {
 
 	// Add frontmatter texts if enabled
 	if p.options.ExtractFrontmatter && frontmatter != nil {
+		// Extract top-level fields
 		if frontmatter.Title != "" {
 			file.Texts = append(file.Texts, Text{
 				Content: frontmatter.Title,
 				Type:    TextTypeFrontmatter,
 				Line:    1,
-				Context: "page title",
+				Context: "title",
 			})
 		}
 		if frontmatter.Description != "" {
@@ -212,9 +254,20 @@ func (p *Parser) ParseFile(path string) (*File, error) {
 				Content: frontmatter.Description,
 				Type:    TextTypeFrontmatter,
 				Line:    1,
-				Context: "page description/meta",
+				Context: "description",
 			})
 		}
+		if frontmatter.MetaTitle != "" {
+			file.Texts = append(file.Texts, Text{
+				Content: frontmatter.MetaTitle,
+				Type:    TextTypeFrontmatter,
+				Line:    1,
+				Context: "meta_title",
+			})
+		}
+
+		// Extract nested frontmatter fields (banner, features, etc.)
+		p.extractNestedFrontmatter(frontmatter.Extra, "", file)
 	}
 
 	// Parse markdown AST
@@ -257,6 +310,99 @@ func (p *Parser) extractFrontmatter(content []byte) ([]byte, *Frontmatter) {
 	}
 
 	return mdContent, &fm
+}
+
+// extractNestedFrontmatter recursively extracts translatable text from nested YAML structures.
+// It handles maps, slices, and identifies translatable fields like "title", "content", "label", etc.
+func (p *Parser) extractNestedFrontmatter(data map[string]any, path string, file *File) {
+	for key, value := range data {
+		currentPath := key
+		if path != "" {
+			currentPath = path + "." + key
+		}
+
+		// Skip fields that are explicitly non-translatable
+		if skipFields[key] {
+			continue
+		}
+
+		switch v := value.(type) {
+		case string:
+			// Only extract if it's a translatable field or looks like content
+			if p.isTranslatableField(key, v) {
+				file.Texts = append(file.Texts, Text{
+					Content: v,
+					Type:    TextTypeFrontmatter,
+					Line:    1,
+					Context: currentPath,
+				})
+			}
+
+		case map[string]any:
+			// Recurse into nested maps
+			p.extractNestedFrontmatter(v, currentPath, file)
+
+		case []any:
+			// Handle arrays (like features[], bulletpoints[])
+			for i, item := range v {
+				itemPath := fmt.Sprintf("%s[%d]", currentPath, i)
+				switch itemVal := item.(type) {
+				case string:
+					// Array of strings (like bulletpoints)
+					if p.isTranslatableField(key, itemVal) {
+						file.Texts = append(file.Texts, Text{
+							Content: itemVal,
+							Type:    TextTypeFrontmatter,
+							Line:    1,
+							Context: itemPath,
+						})
+					}
+				case map[string]any:
+					// Array of objects (like features[])
+					p.extractNestedFrontmatter(itemVal, itemPath, file)
+				}
+			}
+		}
+	}
+}
+
+// isTranslatableField determines if a field value should be extracted for translation.
+func (p *Parser) isTranslatableField(key, value string) bool {
+	// Skip empty values
+	if value == "" {
+		return false
+	}
+
+	// Skip if it looks like a URL or path
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, "http") {
+		return false
+	}
+
+	// Skip if it's a boolean-like string
+	lower := strings.ToLower(value)
+	if lower == "true" || lower == "false" || lower == "yes" || lower == "no" {
+		return false
+	}
+
+	// Known translatable field names
+	if translatableFields[key] {
+		return true
+	}
+
+	// If the key ends with common translatable suffixes
+	if strings.HasSuffix(key, "_title") || strings.HasSuffix(key, "_text") ||
+		strings.HasSuffix(key, "_content") || strings.HasSuffix(key, "_label") ||
+		strings.HasSuffix(key, "_description") {
+		return true
+	}
+
+	// If value is long enough, it's probably content (not a technical value)
+	// Minimum 20 chars to avoid short codes/IDs
+	if len(value) >= 20 && !strings.Contains(value, "/") {
+		return true
+	}
+
+	return false
 }
 
 // walkNode recursively extracts text from AST nodes.

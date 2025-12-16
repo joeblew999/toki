@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,6 +20,16 @@ import (
 	"github.com/romshark/toki/internal/markdown"
 
 	"golang.org/x/text/language"
+)
+
+// linkPatterns for prefixing internal links with language code
+var (
+	// Markdown links: [text](/path) or [text](/path "title")
+	mdLinkPattern = regexp.MustCompile(`(\]\()(/[^)"'\s]+)`)
+	// YAML link fields: link: "/path" or link: /path
+	yamlLinkPattern = regexp.MustCompile(`(link:\s*["']?)(/[^"'\s\n]+)(["']?)`)
+	// Hugo relref: {{< relref "/path" >}} or {{% relref "/path" %}}
+	relrefPattern = regexp.MustCompile(`(\{\{[<%]\s*relref\s+["'])(/[^"']+)(["']\s*[>%]\}\})`)
 )
 
 var (
@@ -154,6 +165,11 @@ func (a *Apply) Run(
 		// Apply translations
 		translated := a.applyTranslations(string(content), file, translations)
 
+		// Prefix internal links with language code if enabled
+		if conf.PrefixLinks {
+			translated = a.prefixLinks(translated, conf.TargetLocale)
+		}
+
 		// Ensure output directory exists
 		outDir := filepath.Dir(outPath)
 		if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -276,4 +292,106 @@ func unescapeICUMessage(s string) string {
 	// Unescape double single quotes
 	s = strings.ReplaceAll(s, "''", "'")
 	return s
+}
+
+// prefixLinks adds language prefix to internal links in the content.
+// For example, /platform becomes /vi/platform for Vietnamese.
+func (a *Apply) prefixLinks(content string, locale language.Tag) string {
+	base, _ := locale.Base()
+	langCode := base.String()
+
+	// Skip if it's English (typically the default, no prefix needed)
+	if langCode == "en" {
+		return content
+	}
+
+	result := content
+
+	// Prefix markdown links: [text](/path) -> [text](/vi/path)
+	result = mdLinkPattern.ReplaceAllStringFunc(result, func(match string) string {
+		return prefixLinkMatch(match, mdLinkPattern, langCode, 1, 2, "")
+	})
+
+	// Prefix YAML link fields: link: "/path" -> link: "/vi/path"
+	result = yamlLinkPattern.ReplaceAllStringFunc(result, func(match string) string {
+		return prefixLinkMatch(match, yamlLinkPattern, langCode, 1, 2, 3)
+	})
+
+	// Prefix Hugo relref: {{< relref "/path" >}} -> {{< relref "/vi/path" >}}
+	result = relrefPattern.ReplaceAllStringFunc(result, func(match string) string {
+		return prefixLinkMatch(match, relrefPattern, langCode, 1, 2, 3)
+	})
+
+	return result
+}
+
+// prefixLinkMatch handles prefixing a single link match.
+// prefixIdx is the submatch index of the prefix, pathIdx is the path, suffixIdx is the suffix (or "" for none).
+func prefixLinkMatch(match string, pattern *regexp.Regexp, langCode string, prefixIdx, pathIdx int, suffixIdx any) string {
+	submatches := pattern.FindStringSubmatch(match)
+	if len(submatches) <= pathIdx {
+		return match
+	}
+
+	path := submatches[pathIdx]
+
+	// Skip external links (shouldn't match our patterns, but be safe)
+	if strings.HasPrefix(path, "http") {
+		return match
+	}
+
+	// Skip already-prefixed links (e.g., /vi/platform)
+	// Check if path starts with a known language code
+	if isAlreadyPrefixed(path) {
+		return match
+	}
+
+	// Skip static assets
+	if strings.HasPrefix(path, "/images/") || strings.HasPrefix(path, "/static/") ||
+		strings.HasPrefix(path, "/css/") || strings.HasPrefix(path, "/js/") ||
+		strings.HasPrefix(path, "/fonts/") {
+		return match
+	}
+
+	// Build new path with language prefix
+	newPath := "/" + langCode + path
+
+	prefix := submatches[prefixIdx]
+	suffix := ""
+	if idx, ok := suffixIdx.(int); ok && idx < len(submatches) {
+		suffix = submatches[idx]
+	}
+
+	return prefix + newPath + suffix
+}
+
+// isAlreadyPrefixed checks if a path already has a language prefix.
+// Matches common 2-letter and some 3-letter language codes.
+func isAlreadyPrefixed(path string) bool {
+	// Path should be like /xx/... where xx is a language code
+	if len(path) < 4 || path[0] != '/' {
+		return false
+	}
+
+	// Find the second slash
+	secondSlash := strings.Index(path[1:], "/")
+	if secondSlash == -1 {
+		return false
+	}
+
+	potentialCode := path[1 : secondSlash+1]
+
+	// Common language codes (2-3 chars)
+	commonCodes := map[string]bool{
+		"en": true, "de": true, "fr": true, "es": true, "it": true,
+		"pt": true, "ru": true, "zh": true, "ja": true, "ko": true,
+		"ar": true, "hi": true, "th": true, "vi": true, "id": true,
+		"nl": true, "pl": true, "tr": true, "sv": true, "da": true,
+		"fi": true, "no": true, "cs": true, "el": true, "he": true,
+		"hu": true, "ro": true, "uk": true, "bg": true, "hr": true,
+		"sk": true, "sl": true, "et": true, "lv": true, "lt": true,
+		"ms": true, "fil": true, "bn": true, "ta": true, "te": true,
+	}
+
+	return commonCodes[potentialCode]
 }

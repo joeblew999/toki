@@ -133,6 +133,7 @@ type ConfigApply struct {
 	MarkdownPath string       // Path to source markdown content
 	OutputPath   string       // Path to write translated markdown
 	BundlePath   string       // Path to tokibundle directory with ARB files
+	PrefixLinks  bool         // Add language prefix to internal links (e.g., /platform -> /vi/platform)
 	QuietMode    bool
 	VerboseMode  bool
 }
@@ -156,6 +157,8 @@ func ParseCLIArgsApply(osArgs []string) (*ConfigApply, error) {
 		"path to write translated markdown files (required)")
 	cli.StringVar(&c.BundlePath, "b", "tokibundle",
 		"path to bundle directory containing ARB files")
+	cli.BoolVar(&c.PrefixLinks, "prefix-links", false,
+		"add language prefix to internal links (e.g., /platform -> /vi/platform)")
 	cli.BoolVar(&c.QuietMode, "q", false, "disable all console logging")
 	cli.BoolVar(&c.VerboseMode, "v", false, "enables verbose console logging")
 

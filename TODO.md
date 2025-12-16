@@ -23,6 +23,19 @@
   - Reads source ARB (en) and target ARB (vi), matches by message ID
   - Replaces text in markdown files with translations
   - Preserves markdown structure and frontmatter
+  - `-prefix-links` flag to add language prefix to internal links
+
+- [x] **Nested YAML front matter extraction**
+  - Extracts translatable text from nested structures: `banner.title`, `features[].content`, etc.
+  - Smart field detection: knows `title`, `content`, `label` are translatable
+  - Skips non-translatable fields: `link`, `image`, `enable`, `date`, etc.
+  - Context path preserved: `features[0].button.label` for translator reference
+
+- [x] **Timezone conversion** (issue #18) - `feat/timezone-conversion` branch
+  - `MatchWithOptions()` for timezone-aware time formatting
+  - `LocaleToTimezone()` returns default timezone for 30+ locales
+  - Converts UTC times to local time before formatting
+  - Tests verify: UTC 15:00 → NYC 10:00, Berlin 16:00, Tokyo 00:00
 
 ## Upstream Issues
 
@@ -37,16 +50,7 @@
 
 ## Known Issues (Our Fork)
 
-- [ ] **Nested YAML front matter not extracted**
-  - `toki generate` only extracts top-level front matter (`title`, `description`, `meta_title`)
-  - Nested structures like `banner.title`, `features[].content`, `features[].bulletpoints[]` are skipped
-  - Impact: Hugo Plate homepage `_index.md` requires manual translation of nested YAML
-  - Workaround: Manually translate homepage nested structures after `toki apply`
-
-- [ ] **Links in translated content not localized**
-  - `toki apply` preserves original English links like `/platform` instead of `/vi/platform`
-  - Impact: Button links in translated pages point to English versions
-  - Workaround: Manually fix links in homepage or add Hugo logic to auto-prefix
+*All previously known issues have been resolved!*
 
 ## Date/Time Handling (Issue #18)
 

@@ -12,6 +12,7 @@ import (
 
 func main() {
 	fLocale := flag.String("l", "en", "i18n locale")
+	fTimezone := flag.String("tz", "", "timezone override (e.g., Europe/Berlin)")
 	flag.Parse()
 	locale := language.MustParse(*fLocale)
 
@@ -32,6 +33,41 @@ func main() {
 		4, time.Now(), time.Now(), tokibundle.String{Value: "Rafael", Gender: tokibundle.GenderMale}))
 
 	fmt.Println(reader.String("searched {# files} in {# folders}", 56, 21))
+
+	// Timezone conversion demo (Issue #18)
+	fmt.Println("\n=== Timezone Conversion Demo ===")
+
+	// Use a fixed UTC time for consistent demo
+	utcTime := time.Date(2025, 1, 20, 15, 0, 0, 0, time.UTC)
+	fmt.Printf("Original time (UTC): %s\n", utcTime.Format(time.RFC3339))
+
+	// Get timezone from flag or locale
+	var loc *time.Location
+	if *fTimezone != "" {
+		var err error
+		loc, err = time.LoadLocation(*fTimezone)
+		if err != nil {
+			fmt.Printf("Warning: invalid timezone %q, using locale default\n", *fTimezone)
+			loc = tokibundle.LocaleToTimezone(locale)
+		}
+	} else {
+		loc = tokibundle.LocaleToTimezone(locale)
+	}
+
+	if loc != nil {
+		fmt.Printf("Target timezone: %s\n", loc.String())
+
+		// Use MatchWithOptions for timezone-aware formatting
+		tzReader, _ := tokibundle.MatchWithOptions(tokibundle.MatchOptions{
+			Locale:       locale,
+			TimeLocation: loc,
+		})
+
+		fmt.Println(tzReader.String("It was finished on {date-full} at {time-full}",
+			utcTime, utcTime))
+	} else {
+		fmt.Println("No default timezone for locale, use -tz flag")
+	}
 
 	//  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut posuere tortor ex,
 	// at interdum lacus facilisis vel. In sed metus sit amet ex pellentesque consectetur

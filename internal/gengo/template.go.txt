@@ -6,6 +6,7 @@ import (
 	"io"
 	"iter"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/go-playground/locales"
@@ -357,3 +358,143 @@ func Locales() []language.Tag { return allLocales }
 
 // Readers returns all available readers.
 func Readers() []Reader { return readers }
+
+/*** TIMEZONE SUPPORT (Issue #18) ***/
+
+// MatchOptions provides configuration for locale matching with timezone support.
+type MatchOptions struct {
+	// Locale is the preferred locale tag.
+	Locale language.Tag
+
+	// TimeLocation specifies the timezone for formatting times.
+	// If nil, times are formatted in their original timezone.
+	// If set, times are converted to this location before formatting.
+	TimeLocation *time.Location
+}
+
+// MatchWithOptions returns the best matching reader for the given options.
+// If TimeLocation is set, returned reader will convert times before formatting.
+func MatchWithOptions(opts MatchOptions) (Reader, language.Confidence) {
+	reader, conf := Match(opts.Locale)
+	if opts.TimeLocation == nil {
+		return reader, conf
+	}
+	return &timezoneReader{reader: reader, loc: opts.TimeLocation}, conf
+}
+
+// timezoneReader wraps a Reader to convert times to a specific timezone.
+type timezoneReader struct {
+	reader Reader
+	loc    *time.Location
+}
+
+func (r *timezoneReader) Locale() language.Tag {
+	return r.reader.Locale()
+}
+
+func (r *timezoneReader) Translator() locales.Translator {
+	return r.reader.Translator()
+}
+
+func (r *timezoneReader) String(tik string, args ...any) string {
+	return r.reader.String(tik, r.convertTimes(args)...)
+}
+
+func (r *timezoneReader) Write(writer io.Writer, tik string, args ...any) (int, error) {
+	return r.reader.Write(writer, tik, r.convertTimes(args)...)
+}
+
+func (r *timezoneReader) convertTimes(args []any) []any {
+	if r.loc == nil {
+		return args
+	}
+	result := make([]any, len(args))
+	for i, arg := range args {
+		if t, ok := arg.(time.Time); ok {
+			result[i] = t.In(r.loc)
+		} else {
+			result[i] = arg
+		}
+	}
+	return result
+}
+
+// LocaleToTimezone returns a default timezone for common locales.
+// Returns nil if no default timezone is known for the locale.
+// This is a best-effort mapping; explicit TimeLocation is recommended.
+func LocaleToTimezone(locale language.Tag) *time.Location {
+	// Try exact match first, then fall back to base language
+	if loc := localeTimezones[locale.String()]; loc != nil {
+		return loc
+	}
+	base, _ := locale.Base()
+	return localeTimezones[base.String()]
+}
+
+// localeTimezones maps common locales to their typical timezones.
+// This is initialized lazily to avoid startup cost if not used.
+var localeTimezones = func() map[string]*time.Location {
+	m := make(map[string]*time.Location)
+
+	// Load common timezone mappings
+	// Language-only mappings (used as fallback)
+	loadTZ := func(key, tz string) {
+		if loc, err := time.LoadLocation(tz); err == nil {
+			m[key] = loc
+		}
+	}
+
+	// Major language-country combinations
+	loadTZ("en-US", "America/New_York")
+	loadTZ("en-GB", "Europe/London")
+	loadTZ("en-AU", "Australia/Sydney")
+	loadTZ("de-DE", "Europe/Berlin")
+	loadTZ("de-AT", "Europe/Vienna")
+	loadTZ("de-CH", "Europe/Zurich")
+	loadTZ("fr-FR", "Europe/Paris")
+	loadTZ("es-ES", "Europe/Madrid")
+	loadTZ("es-MX", "America/Mexico_City")
+	loadTZ("pt-BR", "America/Sao_Paulo")
+	loadTZ("pt-PT", "Europe/Lisbon")
+	loadTZ("it-IT", "Europe/Rome")
+	loadTZ("nl-NL", "Europe/Amsterdam")
+	loadTZ("pl-PL", "Europe/Warsaw")
+	loadTZ("ru-RU", "Europe/Moscow")
+	loadTZ("ja-JP", "Asia/Tokyo")
+	loadTZ("ko-KR", "Asia/Seoul")
+	loadTZ("zh-CN", "Asia/Shanghai")
+	loadTZ("zh-TW", "Asia/Taipei")
+	loadTZ("zh-HK", "Asia/Hong_Kong")
+	loadTZ("th-TH", "Asia/Bangkok")
+	loadTZ("vi-VN", "Asia/Ho_Chi_Minh")
+	loadTZ("id-ID", "Asia/Jakarta")
+	loadTZ("ms-MY", "Asia/Kuala_Lumpur")
+	loadTZ("hi-IN", "Asia/Kolkata")
+	loadTZ("ar-SA", "Asia/Riyadh")
+	loadTZ("he-IL", "Asia/Jerusalem")
+	loadTZ("tr-TR", "Europe/Istanbul")
+
+	// Base language fallbacks (when country not specified)
+	loadTZ("en", "America/New_York")  // Default to US
+	loadTZ("de", "Europe/Berlin")
+	loadTZ("fr", "Europe/Paris")
+	loadTZ("es", "Europe/Madrid")
+	loadTZ("pt", "America/Sao_Paulo")  // Default to Brazil (larger)
+	loadTZ("it", "Europe/Rome")
+	loadTZ("nl", "Europe/Amsterdam")
+	loadTZ("pl", "Europe/Warsaw")
+	loadTZ("ru", "Europe/Moscow")
+	loadTZ("ja", "Asia/Tokyo")
+	loadTZ("ko", "Asia/Seoul")
+	loadTZ("zh", "Asia/Shanghai")
+	loadTZ("th", "Asia/Bangkok")
+	loadTZ("vi", "Asia/Ho_Chi_Minh")
+	loadTZ("id", "Asia/Jakarta")
+	loadTZ("ms", "Asia/Kuala_Lumpur")
+	loadTZ("hi", "Asia/Kolkata")
+	loadTZ("ar", "Asia/Riyadh")
+	loadTZ("he", "Asia/Jerusalem")
+	loadTZ("tr", "Europe/Istanbul")
+
+	return m
+}()

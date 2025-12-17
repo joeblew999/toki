@@ -28,8 +28,8 @@ var (
 	mdLinkPattern = regexp.MustCompile(`(\]\()(/[^)"'\s]+)`)
 	// YAML link fields: link: "/path" or link: /path
 	yamlLinkPattern = regexp.MustCompile(`(link:\s*["']?)(/[^"'\s\n]+)(["']?)`)
-	// Hugo relref: {{< relref "/path" >}} or {{% relref "/path" %}}
-	relrefPattern = regexp.MustCompile(`(\{\{[<%]\s*relref\s+["'])(/[^"']+)(["']\s*[>%]\}\})`)
+	// Note: Hugo relref shortcodes are NOT prefixed because Hugo automatically
+	// resolves the correct language version based on content location.
 )
 
 var (
@@ -296,6 +296,8 @@ func unescapeICUMessage(s string) string {
 
 // prefixLinks adds language prefix to internal links in the content.
 // For example, /platform becomes /vi/platform for Vietnamese.
+// Note: Hugo relref shortcodes are NOT prefixed because Hugo automatically
+// resolves the correct language version based on content location.
 func (a *Apply) prefixLinks(content string, locale language.Tag) string {
 	base, _ := locale.Base()
 	langCode := base.String()
@@ -317,10 +319,9 @@ func (a *Apply) prefixLinks(content string, locale language.Tag) string {
 		return prefixLinkMatch(match, yamlLinkPattern, langCode, 1, 2, 3)
 	})
 
-	// Prefix Hugo relref: {{< relref "/path" >}} -> {{< relref "/vi/path" >}}
-	result = relrefPattern.ReplaceAllStringFunc(result, func(match string) string {
-		return prefixLinkMatch(match, relrefPattern, langCode, 1, 2, 3)
-	})
+	// Hugo relref shortcodes are intentionally NOT prefixed.
+	// Hugo's relref function automatically resolves to the correct language
+	// version based on the content file's location in the directory structure.
 
 	return result
 }

@@ -24,6 +24,7 @@
   - Replaces text in markdown files with translations
   - Preserves markdown structure and frontmatter
   - `-prefix-links` flag to add language prefix to internal links
+  - Skips Hugo relref shortcodes (Hugo resolves language automatically)
 
 - [x] **Nested YAML front matter extraction**
   - Extracts translatable text from nested structures: `banner.title`, `features[].content`, etc.

@@ -14,6 +14,15 @@ tasks:
       - task --list-all
     silent: true
 
+  deps:install:
+    desc: tools install
+    cmds:
+      - go install github.com/go-delve/mcp-dap-server@latest
+  deps:start:
+    desc: start em up on 8080
+    cmds:
+      - mcp-dap-server
+
   install:
     desc: Install toki from source to go bin
     cmds:

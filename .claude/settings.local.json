@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go run:*)",
+      "Bash(go build:*)",
+      "Bash(./toki:*)",
+      "Bash(go install:*)",
+      "Bash(task:*)",
+      "Bash(timeout:*)",
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(go mod:*)",
+      "Bash(cp:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(true)",
+      "Bash(git reset:*)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(gh run list:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(./example:*)",
+      "Bash(git restore:*)",
+      "Bash(git clean:*)",
+      "Bash(grep:*)",
+      "Bash(make:*)",
+      "Bash(gofumpt:*)",
+      "Bash(go test:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "defaultMode": "acceptEdits"
+  }
+}
